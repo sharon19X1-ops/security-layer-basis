@@ -22,7 +22,9 @@ The architecture has evolved through four versions, each validated against real-
 | [v1](./ARCHITECTURE.md) | Original design | Hook layer, 6 event types, 5 rule classes | 9/30 |
 | [v2](./ARCHITECTURE_V2.md) | Tego Skills Index validation | HITL tracking, Skill Identity Registry, multi-agent visibility | 14/30 |
 | [v3](./ARCHITECTURE_V3.md) | snailsploit Memory Injection research | Sub-skill depth tracking, memory write interception, cross-event correlation | 22/30 |
-| [v4](./ARCHITECTURE_V4.md) | VibeTokens 9 Guardrails | Prevention layer, verification layer, completion gates, rationalization detection | **30/30** |
+| [v4](./ARCHITECTURE_V4.md) | VibeTokens 9 Guardrails | Prevention layer, verification layer, completion gates, rationalization detection | 30/30 |
+| [v5](./ARCHITECTURE_V5.md) | Independence Audit | Own Skill Scoring Engine, own registry, no external API in hot path, air-gap capable | 30/30 |
+| [v6](./ARCHITECTURE_V6.md) | Integration Landscape Research | Integration Bus, PSA adapters, SIEM formatters, ATT&CK mapper, REST API v1, RMM deployment | **30/30 + full stack integration** |
 
 ---
 
@@ -36,11 +38,13 @@ The architecture has evolved through four versions, each validated against real-
 
 ---
 
-## v4 Architecture — Security Posture
+## v6 Architecture — Security Posture
 
 ```
 v1–v3 posture:  DETECT → ALERT → BLOCK
 v4 posture:     PREVENT → VERIFY → DETECT → BLOCK
+v5 posture:     PREVENT → VERIFY → DETECT → BLOCK  (own registry, independent)
+v6 posture:     PREVENT → VERIFY → DETECT → BLOCK → INTEGRATE → DISTRIBUTE
 ```
 
 ### Three Layers
@@ -132,10 +136,27 @@ v4: TASK_COMPLETE · DATA_TRUNCATION · LINT_RESULT
 
 ---
 
+## Integration (v6)
+
+Security Layer-Basis is a native citizen in any MSP/MSSP/SMB stack:
+
+| Layer | Supported Platforms |
+|-------|---------------------|
+| **PSA** (ticketing) | ConnectWise PSA · Autotask · HaloPSA · Syncro |
+| **SIEM** (visibility) | Microsoft Sentinel · Splunk · Elastic · QRadar |
+| **SIEM formats** | CEF · ECS (Elastic) · Splunk CIM · Sentinel REST |
+| **RMM** (deployment) | NinjaOne · Datto RMM · N-able · Kaseya VSA · ConnectWise RMM |
+| **Automation** | Webhook (HMAC-signed) · Rewst · Zapier · Tines · Make · n8n |
+| **API** | REST API v1 (read + write + MSSP multi-tenant scopes) |
+| **Partner programs** | ConnectWise Invent · N-able TAP · Microsoft MISA (roadmap) |
+
+Every security event is automatically enriched with MITRE ATT&CK technique IDs and routed to the right channel — PSA ticket, SIEM event, webhook — without leaving the tools the MSP already uses.
+
 ## Additional Documents
 
 - [`THREAT_MODEL.md`](./THREAT_MODEL.md) — Threat class definitions and trust boundaries
-- [`SMB_ARCHITECTURE.md`](./SMB_ARCHITECTURE.md) — SMB edition: user flows, MSSP/SI/Admin modes
+- [`SMB_ARCHITECTURE.md`](./SMB_ARCHITECTURE.md) — SMB edition: user flows, MSSP/SI/Admin modes (v2.0)
+- [`RESEARCH_IntegrationLandscape.md`](./RESEARCH_IntegrationLandscape.md) — Integration landscape research: 5 patterns, 8 findings, phased roadmap
 
 ---
 
