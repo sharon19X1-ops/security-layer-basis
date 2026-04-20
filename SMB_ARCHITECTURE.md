@@ -1,8 +1,9 @@
 # Security Layer-Basis — SMB Edition
 ## High-Level Architecture & User Experience Design
 
-**Version:** 1.0  
-**Date:** 2026-04-19  
+**Version:** 2.0  
+**Date:** 2026-04-20  
+**Basis:** Updated to reflect Architecture v5.0 — own Skill Scoring Engine, independence from external registries, Prevention + Verification layers  
 **Audience:** SMB organizations (10–500 developers) managed by MSSP, System Integrator, or internal IT Admin
 
 ---
@@ -75,15 +76,28 @@ The difference is **who sees what** and **who acts on alerts**.
 ════════════════════════════════════════════════════════════════════════════════
 
                  ┌────────────────────────────────────┐
-                 │        Detection Engine             │
+                 │        Detection Engine v5          │
                  │                                    │
+                 │  PREVENTION                        │
+                 │  ▸ Credential deny list            │
+                 │  ▸ Filesystem scope enforcer       │
+                 │                                    │
+                 │  DETECTION                         │
                  │  ▸ Real-time event analysis        │
                  │  ▸ Policy enforcement              │
-                 │  ▸ Skill identity check (Tego)     │
+                 │  ▸ Skill identity check (own       │
+                 │    registry — no external API)     │
                  │  ▸ HITL + multi-agent tracking     │
+                 │  ▸ Memory write interception       │
+                 │  ▸ Sub-skill depth tracking        │
                  │  ▸ Threat intel feed               │
                  │                                    │
-                 │  Verdict in < 50ms                 │
+                 │  VERIFICATION                      │
+                 │  ▸ Completion + commit gates       │
+                 │  ▸ Rationalization detection       │
+                 │  ▸ Truncation guard                │
+                 │                                    │
+                 │  Verdict in < 70ms                 │
                  └────────────┬───────────────────────┘
                               │
               ┌───────────────┼─────────────────┐
@@ -163,12 +177,46 @@ The difference is **who sees what** and **who acts on alerts**.
   └────────────────────────────────────────────────────────┘
   Developer can dismiss and continue. Event logged.
 
+  HOLD EVENT — Verification gate (new in v5)
+  ───────────────────────────────────────────
+  AI agent claims task is complete without evidence
+        │
+        ▼
+  Verification layer → HOLD verdict (completion gate)
+        │
+        ▼
+  Agent session paused. IDE shows:
+  ┌────────────────────────────────────────────────────────┐
+  │ ⏸  Completion gate: Your AI agent marked this done   │
+  │    but no test results were detected.                 │
+  │    Run your test suite to continue.    [Learn more]   │
+  └────────────────────────────────────────────────────────┘
+  Developer runs tests → gate lifts automatically on pass.
+  Prevents "works on my machine" code reaching the repo.
+
+  DENY EVENT — Prevention (new in v5)
+  ─────────────────────────────────────
+  AI agent attempts to read a credentials file
+        │
+        ▼
+  Prevention layer → DENY (pre-read block)
+        │
+        ▼
+  Read never executes. IDE shows:
+  ┌────────────────────────────────────────────────────────┐
+  │ 🛡️  Access denied: Your AI agent attempted to read    │
+  │     a protected file (.env / credentials).            │
+  │     This file is off-limits per your org policy.      │
+  │     Reference: Policy rule FS-002      [OK]           │
+  └────────────────────────────────────────────────────────┘
+  Credential file never touched. No data exposed.
+
   BLOCK EVENT — Hard stop
   ────────────────────────
   AI agent tries to generate a reverse shell payload
         │
         ▼
-  Detection engine → BLOCK verdict (< 50ms)
+  Detection engine → BLOCK verdict (< 70ms)
         │
         ▼
   Action is suppressed. IDE shows:
@@ -202,13 +250,16 @@ The difference is **who sees what** and **who acts on alerts**.
   │  Pick your security posture:                                     │
   │                                                                  │
   │  ○ Relaxed    Block only confirmed attacks. Warn on everything   │
-  │               else. Minimal friction.                            │
+  │               else. Minimal friction. No verification gates.     │
   │                                                                  │
   │  ● Balanced   Block confirmed attacks + high-risk skills.        │
+  │               Credential deny list on. Completion gates on.      │
   │               Warn on medium risks. (Recommended for SMB)        │
   │                                                                  │
   │  ○ Strict     Block High + Critical. Require approval for        │
-  │               new AI tools. Full audit.                          │
+  │               new AI tools. All prevention + verification        │
+  │               layers active. Diff size limits enforced.          │
+  │               Full audit.                                        │
   │                                              [Continue →]        │
   └──────────────────────────────────────────────────────────────────┘
 
@@ -247,9 +298,10 @@ The difference is **who sees what** and **who acts on alerts**.
   │  └──────────────────────────────────────────────────────────┘   │
   │                                                                  │
   │  🟡  ADVISORIES (4)                                              │
-  │  ▸ 2 unregistered AI skills detected (new tools in use)         │
+  │  ▸ 2 new AI skills auto-scored on first use — 1 flagged HIGH    │
   │  ▸ 1 developer using an unapproved MCP server                   │
   │  ▸ 1 high-risk package suggested (blocked, dev notified)        │
+  │  ▸ 1 completion gate triggered — dev ran tests, gate lifted     │
   │                                          [Review all →]          │
   └──────────────────────────────────────────────────────────────────┘
 
@@ -325,7 +377,11 @@ The difference is **who sees what** and **who acts on alerts**.
   │  │  ✅ Credential exfiltration (CE-001)                     │   │
   │  │  ✅ Prompt injection (PI-001a, PI-001b)                  │   │
   │  │  ✅ Unauthorized MCP servers (MCP-001)                   │   │
-  │  │  ✅ Skill identity check (SI-001, SI-002)                │   │
+  │  │  ✅ Skill identity check — own registry (SI-001, SI-002) │   │
+  │  ✅ Completion + commit gates (CG-001, CG-002)           │   │
+  │  ✅ Credential pre-read deny list (FS-002)               │   │
+  │  ✅ Filesystem scope restrictions (FS-001)               │   │
+  │  ✅ Rationalization detection (OQ-001)                   │   │
   │  │  ✅ Supply chain risk (SC-001)                           │   │
   │  └──────────────────────────────────────────────────────────┘   │
   │                                                                  │
@@ -398,8 +454,8 @@ The difference is **who sees what** and **who acts on alerts**.
   │  ▸ 3 devs using unapproved MCP servers (internal tools)         │
   │    → Add to allowlist? [Yes, add all] [Review one by one]       │
   │                                                                  │
-  │  ▸ 1 unregistered AI skill "custom-sql-helper" in use           │
-  │    → Risk score: Unknown. Approve? [Approve] [Block]            │
+  │  ▸ 1 new AI skill "custom-sql-helper" — auto-scored on load     │
+  │    → Risk score: MEDIUM (web access). Approve? [Approve] [Block]│
   │                                                                  │
   │  ▸ 4 warns for web access patterns (standard, no action needed) │
   │                                                                  │
@@ -433,9 +489,10 @@ The difference is **who sees what** and **who acts on alerts**.
 | Principle | Implementation |
 |-----------|---------------|
 | **Invisible by default** | No UI, no login, no setup — just works after IT installs |
-| **Friction only when it matters** | WARN = dismissible banner. BLOCK = clear message, no jargon. |
+| **Friction only when it matters** | DENY = pre-action block. WARN = dismissible banner. HOLD = gate with clear instruction. BLOCK = clear message, no jargon. |
 | **No blame culture** | Messages say "blocked by policy", never "you did something wrong" |
-| **Fast** | Verdicts in < 50ms — developer never waits |
+| **Fast** | Verdicts in < 70ms — developer never waits |
+| **Verification is helpful, not punitive** | Completion gates ask for test evidence — phrased as "run your tests to continue", not "you failed" |
 
 ### For Admins (SMB IT generalist)
 | Principle | Implementation |
@@ -445,6 +502,8 @@ The difference is **who sees what** and **who acts on alerts**.
 | **Plain English** | Incidents explained in plain language: "What happened, what was stopped, what to do" |
 | **Guided actions** | Every alert ends with a recommended next step |
 | **Compliance without effort** | Audit logs auto-retain for 90 days. Reports auto-generate monthly. |
+| **New skills auto-scored** | When developers use a new AI skill, it is scored automatically. Admin sees risk level immediately — no manual review needed. |
+| **No external dependency to worry about** | Skill scoring runs in our own engine. No third-party API outages affect detection. |
 
 ### For MSSP Analysts
 | Principle | Implementation |
@@ -482,11 +541,14 @@ The difference is **who sees what** and **who acts on alerts**.
 │                                                                        │
 │  Cloud-hosted by Security Layer-Basis:                                 │
 │  ┌──────────────────────────────────────────────────────────────┐     │
-│  │  ▸ Detection Engine (multi-tenant, isolated per org)          │     │
+│  │  ▸ Detection Engine v5 (multi-tenant, isolated per org)      │     │
+│  │    Prevention + Verification + Detection layers              │     │
+│  │  ▸ Own Skill Scoring Engine (no external API calls)          │     │
+│  │  ▸ Own Skill Registry (self-populated, air-gap capable)      │     │
+│  │  ▸ Skill Ingestion Pipeline (GitHub/ClawHub/MCP/npm)         │     │
 │  │  ▸ Audit Store (90-day retention, SOC 2 compliant)           │     │
-│  │  ▸ Operator Console (web app)                                 │     │
-│  │  ▸ Threat Intel Feed (auto-updated)                           │     │
-│  │  ▸ Tego Skill Registry (auto-updated)                         │     │
+│  │  ▸ Operator Console (web app)                                │     │
+│  │  ▸ Threat Intel Feed (auto-updated)                          │     │
 │  └──────────────────────────────────────────────────────────────┘     │
 │                                                                        │
 │  Monthly cost model (SMB):                                             │
@@ -512,19 +574,42 @@ The difference is **who sees what** and **who acts on alerts**.
 | Compliance export | ✅ | ✅ | ✅ |
 | Shadow mode (pre-enforcement) | ❌ | ✅ | ✅ |
 | White-label branding | ❌ | ✅ | ✅ |
+| Skill auto-scoring on first use | ✅ | ✅ | ✅ |
+| Completion gate (HOLD) enforcement | ✅ (Balanced/Strict) | ✅ | ✅ |
+| Credential pre-read deny list | ✅ (Balanced/Strict) | ✅ | ✅ |
+| Diff size limit enforcement | ✅ (Strict) | ✅ (configurable) | ✅ (configurable) |
+| Air-gap / offline deployment | ❌ | ✅ | ✅ |
 
 ---
 
 ## 7. Summary: The Experience Promise
 
-| Persona | Before | After |
+| Persona | Before | After (v5) |
 |---------|--------|-------|
-| **Developer** | No idea if their AI tools are being exploited | Still no idea — because it just works. Zero change. |
-| **IT Admin** | No visibility into AI agent risk. Too complex to manage. | 5-min morning check. Plain English alerts. Self-serve. |
-| **MSSP Analyst** | Can't scale AI security across client base. No tooling. | 15-client fleet at a glance. One policy push. Auto-reports. |
-| **System Integrator** | AI security is a gap in every client engagement. | A deployable product, not a bespoke engagement. |
+| **Developer** | No idea if their AI tools are being exploited | Still no idea — because it just works. Zero change. Completion gates feel like a helpful nudge, not surveillance. |
+| **IT Admin** | No visibility into AI agent risk. Too complex to manage. | 5-min morning check. Plain English alerts. New skills auto-scored. No external vendor dependency to manage. |
+| **MSSP Analyst** | Can't scale AI security across client base. No tooling. | 15-client fleet at a glance. One policy push. Auto-reports. Skill scoring never goes down — own engine. |
+| **System Integrator** | AI security is a gap in every client engagement. | A deployable product, not a bespoke engagement. Air-gap capable for sensitive clients. Shadow mode for clean go-live. |
 
 ---
 
-*Security Layer-Basis SMB Edition — Architecture v1.0*  
+---
+
+## 8. v5 Changes at a Glance (What's New for SMB)
+
+| Change | User Impact |
+|--------|-------------|
+| **Own Skill Scoring Engine** | New AI skills auto-scored on first use — no waiting for a third-party registry to catch up. Admin sees the risk verdict immediately. |
+| **No external registry dependency** | Detection never goes blind due to a third-party API outage. Skill identity checking works offline, air-gapped, day 1. |
+| **Prevention layer (DENY)** | Credential files can never be read by AI agents — blocked before access, not detected after. Admin gets fewer incidents to triage. |
+| **Verification layer (HOLD)** | Completion gates stop unverified code at the source. Fewer broken commits reach the repo. IT admin sees fewer "AI broke the build" tickets. |
+| **Rationalization detection** | Catches AI agents cutting corners ("should work now"). Surfaces to admin as advisory — no action required, just visibility. |
+| **Diff size limits (Strict posture)** | Large AI-generated changes flagged for human review. Reduces risk of a 500-line autonomous diff hiding a bug. |
+| **Air-gap deployment** | For security-sensitive clients (legal, health, finance) — full detection with zero internet dependency. Bundled skill dataset at deploy time. |
+| **Updated posture descriptions** | Balanced posture now explicitly includes credential deny list + completion gates. Strict posture adds diff limits. |
+
+---
+
+*Security Layer-Basis SMB Edition — Architecture v2.0*  
+*Updated to reflect Architecture v5.0 — own Skill Scoring Engine, Prevention + Verification layers*  
 *Part of the Security Layer-Basis project suite*
