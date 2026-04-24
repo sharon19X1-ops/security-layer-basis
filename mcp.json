@@ -1,0 +1,153 @@
+{
+  "_comment": "MCP integration configs for Security Layer-Basis. Shared across team via git. Sensitive values use env-var references — never hardcode secrets.",
+  "mcpServers": {
+    "github": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-github"],
+      "env": {
+        "GITHUB_PERSONAL_ACCESS_TOKEN": "${GITHUB_TOKEN}"
+      },
+      "description": "GitHub integration: issues, PRs, code review, CI status for security-layer-basis repo"
+    },
+    "postgres": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-postgres"],
+      "env": {
+        "POSTGRES_CONNECTION_STRING": "${SLB_DB_URL}"
+      },
+      "description": "Direct access to SLB event store and tenant config DB (dev/staging only — never prod)"
+    },
+    "filesystem": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@modelcontextprotocol/server-filesystem",
+        "/home/work/.openclaw/workspace/projects/security-layer-basis"
+      ],
+      "description": "Filesystem access scoped to this project directory only"
+    },
+    "brave-search": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-brave-search"],
+      "env": {
+        "BRAVE_API_KEY": "${BRAVE_API_KEY}"
+      },
+      "description": "Web search for threat intelligence, MITRE ATT&CK technique lookups, PSA/SIEM API docs"
+    },
+    "slack": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-slack"],
+      "env": {
+        "SLACK_BOT_TOKEN": "${SLACK_BOT_TOKEN}",
+        "SLACK_TEAM_ID": "${SLACK_TEAM_ID}"
+      },
+      "description": "Slack integration: post security alerts to #security-alerts, post build status to #engineering",
+      "channels": {
+        "security_alerts": "#security-alerts",
+        "engineering": "#engineering",
+        "on_call": "#on-call"
+      }
+    },
+    "sequential-thinking": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-sequential-thinking"],
+      "description": "Extended reasoning for complex threat analysis, policy design, and integration architecture decisions"
+    }
+  },
+
+  "integrations": {
+    "_comment": "Metadata for external integrations. Connection config for all v6 integration targets. Secrets via env-vars.",
+
+    "connectwise_psa": {
+      "base_url": "https://{cw_site}/v4_6_release/apis/3.0",
+      "auth_type": "basic_base64",
+      "env": {
+        "company_id": "CW_COMPANY_ID",
+        "public_key": "CW_PUBLIC_KEY",
+        "private_key": "CW_PRIVATE_KEY"
+      },
+      "ticket_endpoint": "/service/tickets",
+      "dedup_endpoint": "/service/tickets?conditions=summary like \"[SLB]%\" AND status/name=\"Open\"",
+      "docs": "https://developer.connectwise.com/Products/Manage/REST"
+    },
+
+    "autotask_psa": {
+      "base_url": "https://webservices{zone}.autotask.net/atservicesrest/v1.0",
+      "auth_type": "api_key_header",
+      "env": {
+        "api_key": "AUTOTASK_API_KEY",
+        "username": "AUTOTASK_USERNAME"
+      },
+      "ticket_endpoint": "/Tickets",
+      "docs": "https://www.autotask.net/help/developerhelp/Content/APIs/REST/REST_API.htm"
+    },
+
+    "halopsa": {
+      "base_url": "https://{halo_site}/api",
+      "auth_type": "oauth2_client_credentials",
+      "env": {
+        "client_id": "HALO_CLIENT_ID",
+        "client_secret": "HALO_CLIENT_SECRET"
+      },
+      "ticket_endpoint": "/Tickets",
+      "docs": "https://halopsa.com/apidoc/"
+    },
+
+    "syncro": {
+      "base_url": "https://{syncro_subdomain}.syncromsp.com/api/v1",
+      "auth_type": "api_key_header",
+      "header_name": "X-Syncro-Api-Key",
+      "env": {
+        "api_key": "SYNCRO_API_KEY"
+      },
+      "ticket_endpoint": "/tickets",
+      "docs": "https://api-docs.syncromsp.com/"
+    },
+
+    "microsoft_sentinel": {
+      "type": "siem",
+      "format": "sentinel-rest",
+      "ingest_url": "https://{workspace_id}.ods.opinsights.azure.com/api/logs?api-version=2016-04-01",
+      "auth_type": "hmac_sha256_shared_key",
+      "env": {
+        "workspace_id": "SENTINEL_WORKSPACE_ID",
+        "workspace_key": "SENTINEL_WORKSPACE_KEY"
+      },
+      "log_type": "SLBSecurityEvents"
+    },
+
+    "splunk_hec": {
+      "type": "siem",
+      "format": "splunk-cim",
+      "ingest_url": "https://{splunk_host}:8088/services/collector",
+      "auth_type": "bearer",
+      "env": {
+        "hec_token": "SPLUNK_HEC_TOKEN"
+      },
+      "index": "security",
+      "sourcetype": "slb:alert"
+    },
+
+    "elastic": {
+      "type": "siem",
+      "format": "ecs",
+      "ingest_url": "https://{elastic_host}/_ingest/pipeline/slb-events",
+      "auth_type": "api_key",
+      "env": {
+        "api_key": "ELASTIC_API_KEY"
+      }
+    },
+
+    "vault": {
+      "type": "secrets",
+      "address": "${VAULT_ADDR}",
+      "auth_method": "approle",
+      "env": {
+        "role_id": "VAULT_ROLE_ID",
+        "secret_id": "VAULT_SECRET_ID"
+      },
+      "mount_path": "secret/slb/tenants",
+      "docs": "https://developer.hashicorp.com/vault/docs"
+    }
+  }
+}

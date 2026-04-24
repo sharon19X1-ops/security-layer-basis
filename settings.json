@@ -1,0 +1,129 @@
+{
+  "_comment": "Controls permissions, tool access, model selection, and hooks for Security Layer-Basis dev sessions.",
+
+  "model": {
+    "default": "claude-sonnet-4",
+    "reasoning_tasks": "claude-sonnet-4",
+    "fast_tasks": "claude-haiku-4",
+    "note": "Use reasoning model for: threat analysis, ATT&CK mapping review, policy design, integration architecture. Use fast model for: lint checks, formatting, simple lookups."
+  },
+
+  "permissions": {
+    "allow": [
+      "Bash(go build ./...)",
+      "Bash(go test ./...)",
+      "Bash(go vet ./...)",
+      "Bash(make *)",
+      "Bash(npm run * --prefix hook/*)",
+      "Bash(npm test --prefix hook/*)",
+      "Bash(golangci-lint run)",
+      "Bash(gofmt -w .)",
+      "Bash(protoc *)",
+      "Bash(git status)",
+      "Bash(git diff *)",
+      "Bash(git log *)",
+      "Bash(git add *)",
+      "Bash(git commit *)",
+      "Bash(git push)",
+      "Bash(go run cmd/policy-validator/main.go *)",
+      "Bash(go run cmd/integration-bus/main.go --dry-run)",
+      "Bash(grep -r * .)",
+      "Bash(find . *)",
+      "Bash(cat *)",
+      "Read(*)",
+      "Write(*.go)",
+      "Write(*.ts)",
+      "Write(*.proto)",
+      "Write(*.yaml)",
+      "Write(*.yml)",
+      "Write(*.json)",
+      "Write(*.md)",
+      "Write(*.sh)",
+      "Edit(*)"
+    ],
+    "deny": [
+      "Bash(curl * prod*)",
+      "Bash(wget * prod*)",
+      "Bash(rm -rf *)",
+      "Bash(* --force *)",
+      "Bash(git push --force*)",
+      "Bash(kubectl * --namespace=prod*)",
+      "Bash(vault kv put * password=*)",
+      "Bash(cat *.pem)",
+      "Bash(cat *.key)",
+      "Bash(cat .env)",
+      "Bash(printenv * *KEY* *SECRET* *TOKEN* *PASSWORD*)"
+    ],
+    "confirm": [
+      "Bash(git push *)",
+      "Bash(make deploy*)",
+      "Bash(make docker-push*)",
+      "Bash(go run cmd/engine/main.go --config config/prod*)"
+    ]
+  },
+
+  "hooks": {
+    "pre_tool_use": [
+      {
+        "matcher": "Bash",
+        "script": "hooks/pre-tool-use/secrets-scan.sh",
+        "description": "Scan command for accidental secret exposure (API keys, passwords, tokens)"
+      },
+      {
+        "matcher": "Write",
+        "script": "hooks/pre-tool-use/lint-check.sh",
+        "description": "Lint Go/TypeScript files before writing"
+      }
+    ],
+    "post_tool_use": [
+      {
+        "matcher": "Write(*.go)",
+        "script": "hooks/post-tool-use/format-check.sh",
+        "description": "Run gofmt + go vet after writing Go files"
+      },
+      {
+        "matcher": "Write(*.ts)",
+        "script": "hooks/post-tool-use/format-check.sh",
+        "description": "Run eslint + prettier after writing TypeScript files"
+      },
+      {
+        "matcher": "Write(policy.yaml)",
+        "script": "hooks/post-tool-use/run-tests.sh",
+        "description": "Validate policy.yaml schema + run policy unit tests after any change"
+      }
+    ]
+  },
+
+  "context": {
+    "auto_load": [
+      "CLAUDE.md",
+      "ARCHITECTURE_V6.md",
+      "README.md"
+    ],
+    "rules_dir": "rules/",
+    "skills_dir": "skills/",
+    "agents_dir": "agents/",
+    "commands_dir": "commands/"
+  },
+
+  "environment": {
+    "required_vars": [
+      "SLB_DB_URL",
+      "VAULT_ADDR",
+      "VAULT_ROLE_ID",
+      "VAULT_SECRET_ID",
+      "GITHUB_TOKEN"
+    ],
+    "optional_vars": [
+      "CW_COMPANY_ID", "CW_PUBLIC_KEY", "CW_PRIVATE_KEY",
+      "AUTOTASK_API_KEY", "AUTOTASK_USERNAME",
+      "HALO_CLIENT_ID", "HALO_CLIENT_SECRET",
+      "SYNCRO_API_KEY",
+      "SENTINEL_WORKSPACE_ID", "SENTINEL_WORKSPACE_KEY",
+      "SPLUNK_HEC_TOKEN",
+      "ELASTIC_API_KEY",
+      "SLACK_BOT_TOKEN", "SLACK_TEAM_ID",
+      "BRAVE_API_KEY"
+    ]
+  }
+}
