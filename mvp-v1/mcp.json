@@ -1,0 +1,122 @@
+{
+  "_comment": "MCP integration configs for Security Layer-Basis MVP v1. Sub-project of security-layer-basis/. MVP scope: only the integrations needed for MVP development and ConnectWise PSA + webhook delivery. Sensitive values use env-var references — never hardcode secrets.",
+  "_scope": "mvp-v1",
+  "_parent_project": "security-layer-basis",
+
+  "mcpServers": {
+    "github": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-github"],
+      "env": {
+        "GITHUB_PERSONAL_ACCESS_TOKEN": "${GITHUB_TOKEN}"
+      },
+      "description": "GitHub integration: issues, PRs, code review, CI status for security-layer-basis MVP repo"
+    },
+
+    "filesystem": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@modelcontextprotocol/server-filesystem",
+        "/home/work/.openclaw/workspace/projects/security-layer-basis/mvp-v1"
+      ],
+      "description": "Filesystem access scoped to MVP sub-project directory only"
+    },
+
+    "sqlite": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-sqlite", "${SLB_MVP_SKILL_DB_PATH}"],
+      "description": "MVP-only: query the skill registry SQLite DB. Read-only by default. Used for skill scoring development and rule tuning."
+    },
+
+    "postgres": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-postgres"],
+      "env": {
+        "POSTGRES_CONNECTION_STRING": "${SLB_MVP_DB_URL}"
+      },
+      "description": "Tenant config + audit log DB access (dev/staging only — never prod). Required for testing PSA adapter integration."
+    },
+
+    "brave-search": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-brave-search"],
+      "env": {
+        "BRAVE_API_KEY": "${BRAVE_API_KEY}"
+      },
+      "description": "Web search for MVP-relevant lookups: ATT&CK technique IDs (the 7 we map in MVP), ConnectWise API documentation, threat intel for CE-001/RS-001 patterns"
+    },
+
+    "sequential-thinking": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-sequential-thinking"],
+      "description": "Extended reasoning for: rule design, HITL threshold tuning, skill registry scoring decisions, false-positive triage"
+    }
+  },
+
+  "integrations": {
+    "_comment": "MVP integration targets only. Full v6 PSA/SIEM/RMM list lives in parent project's mcp.json. Add v1.1+ targets here as they ship.",
+
+    "connectwise_psa": {
+      "_priority": "MVP-required",
+      "base_url": "https://{cw_site}/v4_6_release/apis/3.0",
+      "auth_type": "basic_base64",
+      "env": {
+        "company_id": "CW_COMPANY_ID",
+        "public_key": "CW_PUBLIC_KEY",
+        "private_key": "CW_PRIVATE_KEY"
+      },
+      "ticket_endpoint": "/service/tickets",
+      "dedup_endpoint": "/service/tickets?conditions=summary like \"[SLB]%\" AND status/name=\"Open\"",
+      "docs": "https://developer.connectwise.com/Products/Manage/REST",
+      "_notes": "MVP only supports ConnectWise PSA. Autotask/HaloPSA/Syncro added in v1.1+."
+    },
+
+    "webhook_engine": {
+      "_priority": "MVP-required",
+      "_description": "Universal outbound webhook adapter — covers Rewst/Zapier/Tines/Slack/custom in MVP",
+      "transport": "https",
+      "tls_minimum": "1.3",
+      "signing": "HMAC-SHA256",
+      "headers": [
+        "X-SLB-Signature",
+        "X-SLB-Event-Id",
+        "X-SLB-Tenant",
+        "X-SLB-Timestamp",
+        "X-SLB-Version"
+      ],
+      "retry_policy": "exponential_backoff_5_attempts",
+      "dlq_retention_days": 7
+    },
+
+    "vault": {
+      "_priority": "MVP-required",
+      "type": "secrets",
+      "address": "${VAULT_ADDR}",
+      "auth_method": "approle",
+      "env": {
+        "role_id": "VAULT_ROLE_ID",
+        "secret_id": "VAULT_SECRET_ID"
+      },
+      "mount_path": "secret/slb-mvp/tenants",
+      "docs": "https://developer.hashicorp.com/vault/docs",
+      "_notes": "Vault is non-negotiable in MVP. PSA credentials must be encrypted at rest from day one."
+    }
+  },
+
+  "_deferred_to_v1_1": {
+    "_comment": "Tracked here so we don't lose them. NOT enabled in MVP.",
+    "autotask_psa": "v1.1",
+    "halopsa": "v1.2",
+    "syncro": "v1.2",
+    "microsoft_sentinel": "v1.3",
+    "splunk_hec": "v1.3",
+    "elastic": "v1.3",
+    "qradar": "v1.4",
+    "ninjaone_rmm": "v1.3",
+    "datto_rmm": "v1.3",
+    "n_able_rmm": "v1.3",
+    "kaseya_vsa": "v1.3",
+    "connectwise_rmm": "v1.4"
+  }
+}

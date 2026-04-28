@@ -1,0 +1,272 @@
+# Security Layer-Basis — MVP v1 — Sample Policy
+# This is the reference implementation of the MVP policy schema.
+# Per-tenant overrides live in the Tenant Config Store.
+#
+# IMPORTANT: This file is the SINGLE source of truth for MVP detection logic.
+# Any new rule must include: id, name, severity, action, ATT&CK mapping, test fixture.
+# See MVParchitecture_v1.md §3 for the canonical rule definitions.
+
+version: "1.0-mvp"
+schema: "slb.mvp.v1"
+tenant: "default"
+posture: "balanced"   # MVP postures: relaxed | balanced | strict
+
+# ──────────────────────────────────────────────────────────────────────
+# RULES — 7 in MVP. All have ATT&CK mappings.
+# ──────────────────────────────────────────────────────────────────────
+
+rules:
+
+  # ──────────── Tier 1 — HITL Gate (Highest Priority) ────────────
+
+  - id: HITL-001
+    name: "High-Risk Action Without Human Oversight"
+    priority: 1
+    trigger: [shell_exec, file_write, network_request, mcp_connect, skill_load]
+    detect:
+      - condition: "hitl_present == false"
+        AND: "session_age_sec > 300"
+        AND: "event_type in [shell_exec, network_request, mcp_connect, skill_load]"
+    action: WARN     # MVP: WARN; v1.1: escalate to BLOCK after 30-day baseline
+    alert: [soc-dashboard]
+    severity: HIGH
+    att&ck: T1078
+    fixture: "tests/fixtures/hitl-001-autonomous-shell.json"
+
+  # ──────────── Tier 1 — Skill Identity Scan (Highest Priority) ────────────
+
+  - id: SI-001
+    name: "Skill Capability Risk — High/Critical Score"
+    priority: 1
+    trigger: skill_load
+    detect:
+      - skill_registry_check:
+          skill_id: "{event.skill.skill_id}"
+          version_hash: "{event.skill.version_hash}"
+        conditions:
+          - "risk_score.overall in ['High', 'Critical']"
+      - ml_model: skill_intent_mismatch
+        threshold: 0.85
+    action: BLOCK
+    alert: [soc-dashboard, webhook]
+    severity: CRITICAL
+    att&ck: T1195.001
+    fixture: "tests/fixtures/si-001-critical-skill.json"
+
+  - id: SI-002
+    name: "Unknown Skill — Not in Registry"
+    priority: 1
+    trigger: skill_load
+    detect:
+      - skill_registry_check:
+          skill_id: "{event.skill.skill_id}"
+        result: NOT_FOUND
+    action: WARN     # MVP: WARN; v1.1: auto-block depth > 0 unknowns
+    alert: [soc-dashboard]
+    severity: HIGH
+    att&ck: T1195.001
+    fixture: "tests/fixtures/si-002-unknown-skill.json"
+
+  # ──────────── Tier 2 — Critical Threat Detection ────────────
+
+  - id: CE-001
+    name: "Credential Exfiltration — Shell"
+    priority: 2
+    trigger: shell_exec
+    detect:
+      - regex: '(cat|echo|print|type)\s.*(\.env|id_rsa|\.pem|credentials|secret|token)'
+      - regex: 'curl.+\|\s*sh'
+      - regex: 'export\s+\w+\s*=.*\$\{?[A-Z_]+\}?.*&&.*curl'
+      - regex: 'base64\s.*(\.env|\.pem|id_rsa)'
+    action: BLOCK
+    alert: [soc-dashboard, webhook]
+    severity: CRITICAL
+    att&ck: T1552.001
+    fixture: "tests/fixtures/ce-001-env-exfil.json"
+
+  - id: RS-001
+    name: "Reverse Shell Injection"
+    priority: 2
+    trigger: [shell_exec, completion_received]
+    detect:
+      - regex: 'bash\s+-i\s+>&\s+/dev/tcp'
+      - regex: 'nc\s+-e\s+/bin/sh'
+      - regex: 'python.*socket.*connect.*subprocess'
+      - regex: 'powershell.*webclient.*downloadstring'
+      - regex: 'ncat\s+.*\s+-e'
+      - ml_model: reverse_shell_classifier
+        threshold: 0.92
+    action: KILL_SESSION
+    alert: [soc-dashboard, webhook]
+    severity: CRITICAL
+    att&ck: T1059
+    fixture: "tests/fixtures/rs-001-reverse-shell.json"
+
+  - id: MCP-001
+    name: "Unauthorized MCP Server"
+    priority: 2
+    trigger: mcp_connect
+    detect:
+      - allowlist_check: "mcp_servers.approved"
+        invert: true
+    action: BLOCK
+    alert: [soc-dashboard]
+    severity: HIGH
+    att&ck: T1574
+    fixture: "tests/fixtures/mcp-001-unauth-server.json"
+
+  # ──────────── Tier 3 — Prevention (Lightweight MVP) ────────────
+
+  - id: FS-002
+    name: "Credential File Pre-Read — Deny List"
+    priority: 3
+    trigger: file_write    # MVP: detect writes; v1.1 adds pre-read intercept
+    detect:
+      - path_pattern:
+          - '\.env'
+          - '\.env\..*'
+          - 'id_rsa'
+          - 'id_ed25519'
+          - '.*\.pem'
+          - '.*\.key'
+          - 'credentials'
+          - '\.aws/credentials'
+          - '\.ssh/.*'
+        operation: any
+    action: BLOCK
+    alert: [soc-dashboard]
+    severity: CRITICAL
+    att&ck: T1552.001
+    fixture: "tests/fixtures/fs-002-env-write.json"
+
+# ──────────────────────────────────────────────────────────────────────
+# ML MODELS — 3 in MVP. Local ONNX inference only.
+# ──────────────────────────────────────────────────────────────────────
+
+ml_models:
+  - name: reverse_shell_classifier
+    file: "models/reverse_shell_classifier.onnx"
+    runtime: onnx
+    threshold: 0.92
+    used_by: [RS-001]
+
+  - name: prompt_injection_bert
+    file: "models/prompt_injection_bert.onnx"
+    runtime: onnx
+    threshold: 0.90
+    used_by: []   # MVP: loaded but no blocking rule yet — informs SI-001 enrichment
+    note: "Advisory mode in MVP. Blocking rule PI-001a comes in v1.1 after corpus tuning."
+
+  - name: skill_intent_mismatch
+    file: "models/skill_intent_mismatch.onnx"
+    runtime: onnx
+    threshold: 0.85
+    used_by: [SI-001]
+
+# ──────────────────────────────────────────────────────────────────────
+# ALLOWLISTS
+# ──────────────────────────────────────────────────────────────────────
+
+mcp_servers:
+  approved:
+    - "mcp.github.com"
+    - "mcp.internal.{tenant_domain}"
+    # Add approved MCP servers per tenant via Tenant Config Store
+
+skills:
+  allowlist_mode: "risk-gated"   # own engine — no external dependency
+  block_on_risk: ["Critical", "High"]
+  warn_on_unknown: true
+  depth_limit: 2                  # schema-forward; enforcement comes in v1.1
+
+# ──────────────────────────────────────────────────────────────────────
+# HITL CONFIG
+# ──────────────────────────────────────────────────────────────────────
+
+hitl:
+  autonomous_threshold_sec: 300   # 5 min without human interaction triggers HITL-001
+  action_on_threshold: "WARN"     # MVP: WARN; v1.1: BLOCK after baseline tuning
+  excluded_event_types: []        # all 5 event types in HITL-001 trigger remain monitored
+
+# ──────────────────────────────────────────────────────────────────────
+# INTEGRATION — Integration Bus routing
+# ──────────────────────────────────────────────────────────────────────
+
+integrations:
+
+  psa:
+    enabled: true
+    provider: "connectwise"
+    ticket_on_severity: ["CRITICAL", "HIGH"]
+    auto_close_on_resolve: true
+    dedup_window_min: 60
+    include_remediation_step: true
+
+  webhooks:
+    enabled: true
+    require_tls: true                 # reject non-HTTPS URLs
+    require_hmac_verification: true   # receivers must verify HMAC
+    max_endpoints_per_tenant: 3       # MVP: lower than v6 (5) for noise control
+
+  routing:
+    CRITICAL: [psa, webhook]
+    HIGH:     [psa, webhook]
+    MEDIUM:   [webhook]
+    LOW:      []                      # audit log only
+    WARN:     []                      # audit log only
+
+# ──────────────────────────────────────────────────────────────────────
+# TENANT CONFIG REFERENCE (per-tenant — stored encrypted in Tenant Config Store)
+# ──────────────────────────────────────────────────────────────────────
+# This block documents the schema. Actual values live in Vault + Postgres.
+#
+# tenant_config_schema:
+#   tenant_id: string
+#   display_name: string
+#   org_token: string                  # used for hook mTLS cert derivation
+#   psa:
+#     provider: "connectwise"
+#     company_id: string
+#     board_id: string
+#     credentials: { vault-encrypted }
+#   webhooks:
+#     - name, url, signing_secret, events
+#
+# See MVParchitecture_v1.md §7 for the full schema.
+
+# ──────────────────────────────────────────────────────────────────────
+# DEFERRED — Documented here so v1.1 reviewers have continuity
+# ──────────────────────────────────────────────────────────────────────
+
+_deferred_to_v1_1:
+  rules:
+    - PI-001a   # Prompt Injection direct (BLOCK)
+    - PI-001b   # Prompt Injection filesystem
+    - PI-002    # Memory-resident payload activation
+    - MA-001    # Multi-agent trust escalation
+    - MA-002    # Unauthorized agent spawn
+    - MEM-001   # Memory entry skill-loading directive
+    - CG-001    # Completion gate
+    - CG-002    # Commit gate
+    - CQ-001    # Post-edit lint missing
+    - DI-001    # Action on truncated data
+    - OQ-001    # Rationalization detection
+    - OQ-002    # Output format drift
+    - BR-001    # Diff blast radius
+    - SI-003    # Sub-skill depth limit
+    - SI-004    # Skill-to-memory write isolation
+    - SI-005    # Memory-resident skill directive
+
+  ml_models:
+    - exfil_behavior
+    - dependency_risk
+    - system_call_risk_classifier
+    - autonomy_drift_detector
+    - memory_directive_classifier
+    - rationalization_detector
+    - output_format_drift_detector
+
+  integrations:
+    psa: [autotask, halopsa, syncro]
+    siem: [sentinel, splunk, elastic, qradar]
+    rmm: [ninjaone, datto, n-able, kaseya, connectwise-rmm]

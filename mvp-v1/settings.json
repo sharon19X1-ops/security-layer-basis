@@ -1,0 +1,162 @@
+{
+  "_comment": "Permissions, tool access, model selection, and hooks for Security Layer-Basis MVP v1 dev sessions. Sub-project of security-layer-basis/. Inherits all security rules from parent — does not relax any of them.",
+  "_scope": "mvp-v1",
+  "_parent_project": "security-layer-basis",
+
+  "model": {
+    "default": "claude-sonnet-4",
+    "reasoning_tasks": "claude-sonnet-4",
+    "fast_tasks": "claude-haiku-4",
+    "note": "Reasoning model for: rule design, HITL threshold tuning, ATT&CK mapping, skill scoring decisions, false-positive triage. Fast model for: lint, formatting, simple lookups, schema validation."
+  },
+
+  "permissions": {
+    "allow": [
+      "Bash(go build ./...)",
+      "Bash(go test ./...)",
+      "Bash(go vet ./...)",
+      "Bash(make *)",
+      "Bash(npm run * --prefix hook/*)",
+      "Bash(npm test --prefix hook/*)",
+      "Bash(golangci-lint run)",
+      "Bash(gofmt -w .)",
+      "Bash(protoc *)",
+      "Bash(git status)",
+      "Bash(git diff *)",
+      "Bash(git log *)",
+      "Bash(git add *)",
+      "Bash(git commit *)",
+      "Bash(git push)",
+      "Bash(go run cmd/policy-validator/main.go *)",
+      "Bash(go run cmd/integration-bus/main.go --dry-run)",
+      "Bash(go run cmd/skill-ingester/main.go *)",
+      "Bash(sqlite3 *.db .schema)",
+      "Bash(sqlite3 *.db .tables)",
+      "Bash(grep -r * .)",
+      "Bash(find . *)",
+      "Bash(cat *.go)",
+      "Bash(cat *.ts)",
+      "Bash(cat *.proto)",
+      "Bash(cat *.yaml)",
+      "Bash(cat *.md)",
+      "Read(*)",
+      "Write(*.go)",
+      "Write(*.ts)",
+      "Write(*.proto)",
+      "Write(*.yaml)",
+      "Write(*.yml)",
+      "Write(*.json)",
+      "Write(*.md)",
+      "Write(*.sh)",
+      "Edit(*)"
+    ],
+    "deny": [
+      "Bash(curl * prod*)",
+      "Bash(wget * prod*)",
+      "Bash(rm -rf *)",
+      "Bash(rm -rf /)",
+      "Bash(* --force *)",
+      "Bash(git push --force*)",
+      "Bash(kubectl * --namespace=prod*)",
+      "Bash(vault kv put * password=*)",
+      "Bash(vault kv put * secret=*)",
+      "Bash(cat *.pem)",
+      "Bash(cat *.key)",
+      "Bash(cat .env)",
+      "Bash(cat .env.*)",
+      "Bash(cat */credentials)",
+      "Bash(cat ~/.aws/credentials)",
+      "Bash(cat ~/.ssh/id_*)",
+      "Bash(printenv * *KEY* *SECRET* *TOKEN* *PASSWORD*)",
+      "Bash(env | grep -i *KEY*)",
+      "Bash(env | grep -i *SECRET*)"
+    ],
+    "confirm": [
+      "Bash(git push *)",
+      "Bash(make deploy*)",
+      "Bash(make docker-push*)",
+      "Bash(go run cmd/engine/main.go --config config/prod*)",
+      "Bash(go run cmd/integration-bus/main.go *)",
+      "Write(policy.yaml)"
+    ]
+  },
+
+  "hooks": {
+    "pre_tool_use": [
+      {
+        "matcher": "Bash",
+        "script": "hooks/pre-tool-use/secrets-scan.sh",
+        "description": "Scan command for accidental secret exposure (API keys, passwords, tokens, PSA credentials)"
+      }
+    ],
+    "post_tool_use": [
+      {
+        "matcher": "Write(policy.yaml)",
+        "script": "hooks/post-tool-use/run-tests.sh",
+        "description": "Validate policy.yaml against MVP schema and run policy unit tests after any change"
+      },
+      {
+        "matcher": "Write(*.go)",
+        "script": "hooks/post-tool-use/run-tests.sh",
+        "description": "Run gofmt + go vet + relevant tests after writing Go files"
+      },
+      {
+        "matcher": "Write(*.proto)",
+        "script": "hooks/post-tool-use/run-tests.sh",
+        "description": "Regenerate protobuf bindings + run schema-compatibility tests after .proto changes"
+      }
+    ]
+  },
+
+  "context": {
+    "auto_load": [
+      "CLAUDE.md",
+      "MVParchitecture_v1.md"
+    ],
+    "rules_dir": "rules/",
+    "skills_dir": "skills/",
+    "agents_dir": "agents/",
+    "commands_dir": "commands/",
+    "_note": "MVP keeps auto_load minimal (2 files). Parent project ARCHITECTURE_V6.md is referenced by name but not auto-loaded — pull it in only when working on forward-compatibility decisions."
+  },
+
+  "environment": {
+    "required_vars": [
+      "SLB_MVP_DB_URL",
+      "SLB_MVP_SKILL_DB_PATH",
+      "VAULT_ADDR",
+      "VAULT_ROLE_ID",
+      "VAULT_SECRET_ID",
+      "GITHUB_TOKEN"
+    ],
+    "optional_vars": [
+      "CW_COMPANY_ID",
+      "CW_PUBLIC_KEY",
+      "CW_PRIVATE_KEY",
+      "BRAVE_API_KEY"
+    ],
+    "_deferred_vars_v1_1_plus": [
+      "AUTOTASK_API_KEY",
+      "AUTOTASK_USERNAME",
+      "HALO_CLIENT_ID",
+      "HALO_CLIENT_SECRET",
+      "SYNCRO_API_KEY",
+      "SENTINEL_WORKSPACE_ID",
+      "SENTINEL_WORKSPACE_KEY",
+      "SPLUNK_HEC_TOKEN",
+      "ELASTIC_API_KEY"
+    ]
+  },
+
+  "mvp_constraints": {
+    "_comment": "MVP discipline rules — enforced by reviewers, not by automation",
+    "max_event_types": 8,
+    "max_rules": 7,
+    "max_ml_models": 3,
+    "supported_ides": ["vscode", "claude-code"],
+    "supported_psas": ["connectwise"],
+    "supported_siems": [],
+    "verdicts_allowed": ["ALLOW", "WARN", "BLOCK", "KILL_SESSION"],
+    "policy_compliance": "MVParchitecture_v1.md is canonical — any change to constraints requires explicit MVP-scope review"
+  }
+}
