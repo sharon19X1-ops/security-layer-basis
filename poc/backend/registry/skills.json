@@ -1,0 +1,14 @@
+{
+  "skills": [
+    {"skill_id": "github-copilot",   "creator": "GitHub",        "registry": "github",   "risk": "Low"},
+    {"skill_id": "cursor-ai",         "creator": "Cursor",        "registry": "clawhub",  "risk": "Low"},
+    {"skill_id": "claude-code",       "creator": "Anthropic",     "registry": "mcp",      "risk": "Low"},
+    {"skill_id": "aws-mcp-server",    "creator": "AWS",           "registry": "mcp",      "risk": "Medium"},
+    {"skill_id": "filesystem-agent",  "creator": "openai",        "registry": "github",   "risk": "Medium"},
+    {"skill_id": "db-admin-agent",    "creator": "unknown",       "registry": "local",    "risk": "High"},
+    {"skill_id": "network-scanner",   "creator": "unknown",       "registry": "local",    "risk": "Critical"},
+    {"skill_id": "code-exec-agent",   "creator": "shadow-dev",    "registry": "local",    "risk": "Critical"},
+    {"skill_id": "memory-reader",     "creator": "anon",          "registry": "github",   "risk": "High"},
+    {"skill_id": "safe-formatter",    "creator": "acme-internal", "registry": "local",    "risk": "Low"}
+  ]
+}
